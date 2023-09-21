@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Define the console appender -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <!-- Define the output format -->
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Set the log level for root logger to WARN.
+         This means only messages of level WARN or ERROR will be printed. -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+    <!-- If you want to see logs from a specific package or class,
+         you can set its level specifically. E.g., to see INFO logs from com.myapp package: -->
+    <!--
+    <logger name="com.myapp" level="INFO" />
+    -->
+
+</configuration>
