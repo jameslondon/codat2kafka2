@@ -6,9 +6,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.header.Headers;
-import org.apache.kafka.common.header.internals.RecordHeader;
-import org.apache.kafka.common.header.internals.RecordHeaders;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -58,7 +55,7 @@ public class KafkaProducerWrapper implements AutoCloseable, DataEventSubscriber 
     @Override
     public void onDataFetched(String rowData, String serviceName) throws NoSuchAlgorithmException {
         //create a topic for the service
-        String topic = Character.toUpperCase(serviceName.charAt(0)) + serviceName.substring(1) + "_RAW";
+        String topic = Character.toUpperCase(serviceName.charAt(0)) + serviceName.substring(1) + "_CODAT";
         try {
             produceStringMessageToKafka(topic, rowData);
             System.out.println("Kafka producer produces - Topic: " + topic + "--- Message: " + rowData);
