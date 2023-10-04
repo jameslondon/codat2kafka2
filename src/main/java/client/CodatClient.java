@@ -1,17 +1,19 @@
 package client;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import event.DataEventSubscriber;
 import okhttp3.*;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 
 import static util.ResponseHasherUUID.*;
 
@@ -28,61 +30,59 @@ public class CodatClient {
         this.subscriber = subscriber;
     }
 
-    public CompletableFuture<Void> fetchAllDataStringAsync(String baseApiUrl, String serviceName, String apiKey, String authorization, Properties authProperties) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                fetchAllDataString(baseApiUrl, serviceName, apiKey, authorization, authProperties);
-            } catch (Exception e) {
-                System.out.println("Exception in fetchAllDataString: "
-                        + ". ServiceName: " + serviceName
-                        + ". Message: " + e.getMessage());
-            }
-        });
-    }
-
-    public void fetchAllDataString(String baseApiUrl, String serviceName, String apiKey, String authorization, Properties authProperties) throws Exception {
+    public void fetchAllDataString(String baseApiUrl, String serviceName, String apiKey, String authorization, Properties authProperties, ExecutorService executorService) {
         int pageNumber = Integer.parseInt(authProperties.getProperty("pageNumber"));
         int pageSize = Integer.parseInt(authProperties.getProperty("pageSize"));
         int maxPageNumber = Integer.parseInt(authProperties.getProperty("maxPageNumber"));
-        boolean hasNextPage = true;
-        String respPayload = "";
+        AtomicBoolean hasNextPage = new AtomicBoolean(true);
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        AtomicInteger currentPage = new AtomicInteger(1);
 
-        while (hasNextPage && pageNumber <= maxPageNumber) {
-            String apiUrl = baseApiUrl + "?orderBy=id&pageSize=" + pageSize + "&page=" + pageNumber;
-            respPayload = this.fetchApiData(apiUrl, apiKey, authorization);
-            System.out.println("apiUrl: " + apiUrl);
-            if (!respPayload.isEmpty() && subscriber != null) {
-                //to get the current response hash value
-                String hash1 = calculateHash(respPayload);
-                System.out.println("codat respPayload: " + respPayload);
-                System.out.println("hash1: " + hash1);
-//                if (!isDuplicate.test(hash1)) {
-                    subscriber.onDataFetched(respPayload, serviceName);
-//                }
-                pageNumber++;
-            } else {
-                hasNextPage = false;
+        int chunkSize = 10; // or some other value depending on your needs
+
+        while (hasNextPage.get() && pageNumber <= maxPageNumber) {
+            List<CompletableFuture<Void>> chunkFutures = new ArrayList<>();
+
+            for (int i = 0; i < chunkSize && pageNumber <= maxPageNumber; i++) {
+                final int page = pageNumber++;
+
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    String apiUrl = baseApiUrl + "?orderBy=id&pageSize=" + pageSize + "&page=" + page;
+                    System.out.println("Ready to fetch: " + apiUrl);
+                    String respPayload;
+
+                    try {
+                        respPayload = this.fetchApiData(apiUrl, apiKey, authorization);
+//                        Thread.sleep(1000 * 60);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Exception while fetching API data for page " + page + ": " + e.getMessage());
+                    }
+                    JSONObject payloadJson = new JSONObject(respPayload);
+                    JSONArray results = payloadJson.getJSONArray("results");
+
+                    if (results.length() > 0 && subscriber != null) {
+//                        String hash1;
+                        try {
+//                            hash1 = calculateHash(respPayload);
+                            subscriber.onDataFetched(respPayload, serviceName);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    } else {
+                        hasNextPage.set(false);
+                    }
+                }, executorService);
+
+                chunkFutures.add(future);
             }
+
+            // Wait for the chunk of threads to complete
+            CompletableFuture.allOf(chunkFutures.toArray(new CompletableFuture[0])).join();
+
+            // If any of the threads in the chunk found no next page, stop
+            if (!hasNextPage.get()) break;
         }
-    }
 
-    private List<Map<String, Object>> parseJsonData(String jsonData) {
-        List<Map<String, Object>> resultsList = new ArrayList<>();
-
-        // Parse the JSON string using Gson
-        JsonObject jsonObject = JsonParser.parseString(jsonData).getAsJsonObject();
-
-        // Extract the "results" array
-        JsonArray resultsArray = jsonObject.getAsJsonArray("results");
-
-        // Convert each JsonObject in the results array to a Map and add to the resultsList
-        for (int i = 0; i < resultsArray.size(); i++) {
-            JsonObject resultObject = resultsArray.get(i).getAsJsonObject();
-            Map<String, Object> resultMap = new Gson().fromJson(resultObject, Map.class);
-            System.out.println("Record " + i + ": " + resultMap);
-            resultsList.add(resultMap);
-        }
-        return resultsList;
     }
 
     private String fetchApiData(String apiUrl, String apiKey, String authorization) throws Exception {

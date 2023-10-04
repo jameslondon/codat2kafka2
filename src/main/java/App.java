@@ -13,7 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 public class App {
-    private static final int NUMBER_OF_THREADS = 10;
+    private static final int NUMBER_OF_THREADS = 40;
     private static final ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
 
     public static void main(String[] args) throws Exception {
@@ -43,6 +43,8 @@ public class App {
             System.out.println("Encountered an IO issue: " + ioException.getMessage());
         } catch (Exception e) {
             System.out.println("Oops!: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException(e);
         }
         //save updated/add response payload hash set
 //        ResponseHasher.saveHashSetToFile();
@@ -94,7 +96,8 @@ public class App {
                                     entry.getValue().getServiceName(),
                                     entry.getValue().getApiKey(),
                                     entry.getValue().getAuthorization(),
-                                    dataPullProperties);
+                                    dataPullProperties,
+                                    executorService);
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
